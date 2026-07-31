@@ -1,0 +1,45 @@
+
+d:\dev\cc65>REM @echo off 
+
+d:\dev\cc65>rem ============================================================ 
+
+d:\dev\cc65>rem  build.bat - Cowboy op het eiland: compileren en starten 
+
+d:\dev\cc65>rem  Zet dit bestand in dezelfde map als main.c 
+
+d:\dev\cc65>rem ============================================================ 
+
+d:\dev\cc65>rem --- Paden naar jouw installatie ----------------------------- 
+
+d:\dev\cc65>set CC65_HOME=D:\dev\cc65 
+
+d:\dev\cc65>set CL65="D:\dev\cc65\cc65\bin\cl65.exe" 
+
+d:\dev\cc65>set VICE="D:\dev\cc65\vice\bin\x64sc.exe" 
+
+d:\dev\cc65>rem ------------------------------------------------------------- 
+
+d:\dev\cc65>echo [1/2] Compileren... 
+[1/2] Compileren...
+
+d:\dev\cc65>"D:\dev\cc65\cc65\bin\cl65.exe" -O -t c64 main.c cowboy_frames.c island_gfx.c intro_gfx.c anims.c -o cowboy.prg 
+main.c:1169: Warning: Variable 'jump_arc_x' is defined but never used
+main.c:1169: Warning: Variable 'jump_arc_y' is defined but never used
+
+d:\dev\cc65>if errorlevel 1 (
+echo. 
+ echo *** Compileren MISLUKT - emulator wordt niet gestart. ***  
+ pause 
+ exit /b 1 
+) 
+
+d:\dev\cc65>echo [2/2] Starten in VICE... 
+[2/2] Starten in VICE...
+
+d:\dev\cc65>rem -autostart laadt en start de prg meteen 
+
+d:\dev\cc65>rem -pal      zorgt voor 50 Hz, waar de animatiesnelheid op is afgestemd 
+
+d:\dev\cc65>"D:\dev\cc65\vice\bin\x64sc.exe" -autostart cowboy.prg -pal 
+
+d:\dev\cc65>exit /b 0 
