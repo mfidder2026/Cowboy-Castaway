@@ -159,6 +159,18 @@ static const unsigned char cycle[4] = { 0, 1, 2, 1 };
 /* Zacht op-en-neer voor de meeuwen (offset in pixels). */
 static const unsigned char bob[8] = { 0, 0, 1, 2, 2, 2, 1, 0 };
 
+/* Hoe lang wankelt de cowboy duizelig na een kokosnoot op zijn kop? */
+#define DIZZY_TIME    42u
+
+/* Zichtbare terugkaats-boog van de kokosnoot na een treffer, als offset van
+ * het BLOB-MIDDEN vanaf het hoofd op het moment van de klap. dx groeit in de
+ * stuiterrichting; dy gaat eerst omhoog (negatief, apex ~14px boven het hoofd)
+ * en dan voorbij zijn voeten het zand op (dy +20). Beide 16 lang; wil je een
+ * tweede stuitertje, verleng beide tabellen en pas de 16u-check in
+ * coconut_tick() aan. */
+static const signed char cc_arc_dx[16] = {  0,  2,  4,  6,  8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 29, 33 };
+static const signed char cc_arc_dy[16] = { -3, -8,-11,-13,-14,-13,-11, -8, -3,  3,  9, 14, 18, 20, 20, 20 };
+
 /* --- toestand van de cowboy (file-scope, zodat de animatiespeler erbij kan) */
 static unsigned int  cow_x  = 160;          /* horizontale positie (9-bit) */
 static unsigned char cow_y  = 170;          /* verticale positie           */
@@ -178,6 +190,16 @@ static signed   char anim_vx      = 0;      /* snelheid per beeld  (WORLD)     *
 static signed   char anim_vy      = 0;
 static unsigned char anim_pending = 0xFF;   /* animatie die op de oever wacht  */
 static unsigned int  anim_cool    = ANIM_WAIT_MIN;  /* wachttijd tot de volgende */
+
+/* --- toestand van de kokosnoot-bonk --- */
+static unsigned char anim_bonk      = 0;    /* huidige animatie kan bonken (ANIM_BONK) */
+static unsigned char coconut_bonked = 0;    /* deze worp de cowboy al geraakt?         */
+static unsigned char dizzy_timer    = 0;    /* >0: cowboy wankelt duizelig na          */
+static unsigned char coconut_rebound = 0;   /* >0: noot maakt zijn zichtbare boog      */
+static unsigned char cc_idx = 0, cc_sub = 0;/* plek in de terugkaats-boog              */
+static signed   char cc_sign = 1;           /* +1 = stuitert naar rechts, -1 naar links*/
+static unsigned int  cc_hx   = 0;           /* hoofdmidden op moment van de klap        */
+static unsigned char cc_hy   = 0;
 
 /* --- toestand van de JUMP-animatie --- */
 static unsigned char jump_state    = JUMP_INACTIVE;
@@ -339,10 +361,43 @@ static void anim_stop(void)
 {
     anim_playing   = 0;
     anim_world     = 0;
+    anim_bonk      = 0;
+    coconut_rebound = 0;
     anim_cool      = ANIM_WAIT_MIN + (rnd() & ANIM_WAIT_VAR);
     VIC.spr_ena    = (unsigned char)(VIC.spr_ena & 0xE7);
     VIC.spr_mcolor = 0x01;                 /* alleen de cowboy weer  */
     VIC.spr_exp_x  = (unsigned char)(VIC.spr_exp_x & 0xE7);  /* niet uitgerekt */
+}
+
+/* Eén beeld van de zichtbare terugkaats van de kokosnoot. Stuurt sprite 3
+ * zelf langs de boog uit cc_arc_dx/dy, los van de vallende noot; de pointer
+ * en kleur van blok 111 staan nog goed uit de laatste val-stap. Aan het eind
+ * van de boog stopt de animatie. */
+static void coconut_tick(void)
+{
+    int sx, sy;
+
+    if (cc_idx >= 16u)
+    {
+        coconut_rebound = 0;
+        anim_stop();
+        return;
+    }
+
+    sx = (int)cc_hx + (int)cc_sign * cc_arc_dx[cc_idx] - 7;   /* blob-midden -> spritehoek */
+    sy = (int)cc_hy + cc_arc_dy[cc_idx] - 11;
+
+    if (sx >= 0 && sx < 400)
+    {
+        set_sprite_pos(3, (unsigned int)sx, (unsigned char)sy);
+        VIC.spr_ena |= 0x08;
+    }
+    else
+    {
+        VIC.spr_ena = (unsigned char)(VIC.spr_ena & 0xF7);
+    }
+
+    if (++cc_sub >= 2u) { cc_sub = 0; ++cc_idx; }
 }
 
 /* JUMP-animatie stoppen en alles weer normaal maken. */
@@ -524,6 +579,11 @@ static void anim_start(unsigned char n)
 {
     const animation *a = &animations[n];
 
+    /* On-demand effect-plaatje in het gedeelde scratch-blok (blok 111) laden.
+       Zo delen de kokosnoot en de fles hetzelfde vrije sprite-blok. */
+    if (a->scratch_src)
+        memcpy((void *)(SPRITE_RAM + (5u + FX_SCRATCH) * 64u), a->scratch_src, 64);
+
     anim_steps   = a->steps;
     anim_count   = a->count;
     anim_idx     = 0;
@@ -531,6 +591,9 @@ static void anim_start(unsigned char n)
 
     /* Speelt het zich af naast de cowboy, of ergens anders in de wereld? */
     anim_world = (unsigned char)(a->flags & ANIM_WORLD);
+    anim_bonk       = (unsigned char)((a->flags & ANIM_BONK) ? 1 : 0);
+    coconut_bonked  = 0;
+    coconut_rebound = 0;
     anim_wx    = a->start_x;
     anim_wy    = a->start_y;
     anim_vx    = a->vx;
@@ -679,6 +742,9 @@ static unsigned char left_is_nearer(void)
     return (unsigned char)((fx2 - sand_min_x[i]) < (sand_max_x[i] - fx2));
 }
 
+/* Forward declaration */
+static unsigned char is_at_far_right(void);
+
 /* Vraag animatie n aan.
  *  - Kan hij meteen beginnen, dan gebeurt dat en komt 0xFF terug.
  *  - Moet hij ervoor aan het water staan (ANIM_AT_SHORE), dan kiest deze
@@ -690,9 +756,20 @@ static unsigned char request_anim(unsigned char n)
 {
     unsigned char want_left, is_left;
 
-    if (animations[n].flags & (ANIM_AT_SHORE | ANIM_TO_LEFT))
+    
+    /* Special handling for fire animation (index 0) to ensure correct facing */
+    if (n == 0 || (animations[n].flags & (ANIM_AT_SHORE | ANIM_TO_LEFT)))
     {
-        want_left = left_is_nearer();
+        /* Vissen (ANIM_AT_SHORE) speelt NAAR de dichtstbijzijnde oever toe:
+         * de hengel gaat het water in. Het kampvuur moet juist op vaste grond
+         * blijven, dus dat speelt AF van het dichtstbijzijnde water -- staat de
+         * cowboy rechts op het eiland, dan komt het vuur aan zijn linkerkant en
+         * andersom. Voor het vuur keren we de keuze daarom om. */
+        if (animations[n].flags & ANIM_AT_SHORE)
+            want_left = left_is_nearer();                       /* naar de oever */
+        else
+            want_left = (unsigned char)(!left_is_nearer());     /* van het water af */
+
         is_left   = (unsigned char)((animations[n].flags & ANIM_TO_LEFT) != 0);
 
         if (want_left != is_left && animations[n].mirror != ANIM_NO_MIRROR)
@@ -714,6 +791,21 @@ static unsigned char request_anim(unsigned char n)
 
     anim_start(n);
     return 0xFF;
+}
+
+/* Is de cowboy helemaal rechts op het eiland? */
+static unsigned char is_at_far_right(void)
+{
+    unsigned char i   = (unsigned char)(cow_y - SAND_TOP);
+    unsigned char fx2 = (unsigned char)(cow_x >> 1);            /* naar multicolor-pixels */
+    
+    /* Check if we're within the island boundaries */
+    if (i >= 41) return 0;  /* outside y range */
+    if (fx2 < sand_min_x[i] || fx2 > sand_max_x[i]) return 0;
+    
+    /* Check if we're at the far right edge (max_x = 135) */
+    /* Use more conservative threshold to ensure fire doesn't appear in water */
+    return (unsigned char)(sand_max_x[i] >= 135 && fx2 >= 132 && fx2 <= 135);
 }
 
 /* Zet de VIC in multicolor bitmap-modus in bank 1. Doet nog geen plaatje;
@@ -835,14 +927,52 @@ int main(void)
         }
         else if (anim_playing)
         {
-            if (anim_world)
+            if (coconut_rebound)
             {
-                /* Schuift zijn eigen weg door de wereld, los van de cowboy. */
-                anim_wx = (unsigned int)((int)anim_wx + anim_vx);
-                anim_wy = (unsigned char)((int)anim_wy + anim_vy);
-                anim_place();
+                /* De noot maakt zijn zichtbare boog van zijn hoofd af; deze
+                   driver eindigt de animatie zelf als de boog klaar is. */
+                coconut_tick();
             }
-            anim_tick();
+            else
+            {
+                if (anim_world)
+                {
+                    /* Schuift zijn eigen weg door de wereld, los van de cowboy. */
+                    anim_wx = (unsigned int)((int)anim_wx + anim_vx);
+                    anim_wy = (unsigned char)((int)anim_wy + anim_vy);
+                    anim_place();
+
+                    /* Kokosnoot op zijn kop? Alleen bij ANIM_BONK, en één keer
+                       per worp. We vergelijken het midden van de noot met zijn
+                       hoofd (hoedhoogte). Raak: hij wankelt na EN de noot wipt
+                       zichtbaar van zijn hoofd weg (grond-stuiter vervalt). */
+                    if (anim_bonk && !coconut_bonked && anim_cur->fxa_frame != FX_NONE)
+                    {
+                        int ccx = (int)anim_wx + 7;                       /* midden kokosnoot */
+                        int ccy = (int)anim_wy + anim_cur->fxa_dy + 11;   /* midden blob      */
+                        int hx  = (int)cow_x + 12;                        /* midden hoofd     */
+                        int hy  = (int)cow_y + 2;                         /* hoedhoogte       */
+                        int ex  = hx - ccx;
+                        int ax  = (ex < 0) ? -ex : ex;
+                        int ey  = hy - ccy;   if (ey < 0) ey = -ey;
+
+                        if (ax <= 9 && ey <= 7)
+                        {
+                            coconut_bonked = 1;
+                            dizzy_timer    = DIZZY_TIME;      /* hij wankelt na  */
+
+                            coconut_rebound = 1;              /* noot wipt weg   */
+                            cc_idx  = 0;
+                            cc_sub  = 0;
+                            cc_hx   = (unsigned int)hx;
+                            cc_hy   = (unsigned char)hy;
+                            cc_sign = (signed char)((ex > 0) ? -1 : 1);   /* weg van 't hoofd */
+                        }
+                    }
+                }
+
+                if (!coconut_rebound) anim_tick();   /* niet doortikken op het klap-beeld */
+            }
         }
 
         /* ============== meeuwen (sprites 1 en 2) ============== */
@@ -920,6 +1050,7 @@ int main(void)
             if (jump_state != JUMP_INACTIVE) jump_stop();
             anim_pending = 0xFF;         /* naar de oever lopen vervalt   */
             idle_timer  = 0;
+            dizzy_timer = 0;             /* jij neemt over: niet meer duizelig */
             wandering   = 0;
             wander_left = 0;
             wander_rest = 0;
@@ -929,6 +1060,22 @@ int main(void)
             else if (want_down)  dir = DIR_DOWN;
             else                 dir = DIR_UP;
             active = 1;
+        }
+        else if (dizzy_timer)
+        {
+            /* Net een kokosnoot gevangen: duizelig heen en weer zwaaien,
+               daarna naar voren bijkomen. Loopt los van de vallende noot,
+               dus sprite 0 wankelt terwijl sprite 3 zijn boog maakt. */
+            unsigned char ph   = (unsigned char)(dizzy_timer / 6u);
+            unsigned char pose = (dizzy_timer > 8u)
+                                 ? ((ph & 1u) ? COW_RIGHT : COW_LEFT)
+                                 : COW_DOWN;
+            memcpy((void *)SPRITE_RAM, cowboy_frames[pose][0], 64);
+            loaded = LOADED_IDLE;
+            POKE(SPRITE_PTR, FIRST_BLOCK);
+            --dizzy_timer;
+            active     = 0;
+            idle_timer = 0;
         }
         else if (jump_state != JUMP_INACTIVE)
         {

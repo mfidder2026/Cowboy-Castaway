@@ -105,6 +105,15 @@
 
 #define FX_FRAME_COUNT  42      /* <-- ophogen als je frames toevoegt     */
 
+/* On-demand effect-frame dat het LAATSTE VRIJE sprite-blok deelt (blok 111).
+ * De cowboy heeft 48 sprite-blokken; 47 zijn al vergeven (cowboy, meeuwen en
+ * de 42 effect-frames), dus er is er precies EEN vrij. Omdat animaties nooit
+ * tegelijk spelen, kunnen meerdere on-demand effecten -- de kokosnoot en de
+ * fles -- dat ene blok delen: main.c kopieert bij de start het juiste plaatje
+ * erin (zie het scratch_src-veld hieronder). FX_FRAME_COUNT blijft daarom 42;
+ * fx_frames[] wordt NIET langer, we gebruiken alleen het lege blok erachter. */
+#define FX_SCRATCH     42       /* -> FX_BLOCK+42 = blok 111 (het vrije blok) */
+
 /* --- één stap van een animatie -------------------------------------- */
 typedef struct {
     unsigned char fxa_frame;    /* effect A: frame, of FX_NONE            */
@@ -159,6 +168,10 @@ typedef struct {
 #define ANIM_XEXP_B     0x04
 #define ANIM_AT_SHORE   0x08
 #define ANIM_TO_LEFT    0x10
+/* ANIM_BONK: een WORLD-effect (de kokosnoot) kan de cowboy op zijn kop raken
+ * als hij er toevallig onder staat. main.c checkt dan elk beeld op een botsing
+ * en laat hem duizelig nawankelen terwijl de noot zichtbaar terugkaatst. */
+#define ANIM_BONK       0x20
 #define ANIM_NO_MIRROR  0xFF
 
 /* --- een complete animatie ------------------------------------------ */
@@ -174,6 +187,7 @@ typedef struct {
     signed   char    vx;        /* pixels per beeld (alleen bij WORLD)    */
     signed   char    vy;
     unsigned char    mirror;    /* gespiegelde tegenhanger, of ANIM_NO_MIRROR */
+    const unsigned char *scratch_src; /* on-demand plaatje voor blok 111, of 0 */
 } animation;
 
 /* --- sneltoetsen ----------------------------------------------------- */
@@ -239,6 +253,7 @@ typedef struct {
 #define KEYBIT_Z     0x10
 #define KEYROW_SPACE 0x7F
 #define KEYBIT_SPACE 0x10
+#define KEYBIT_GEEN  0x00
 
 extern const unsigned char fx_frames[FX_FRAME_COUNT][64];
 extern const animation     animations[];

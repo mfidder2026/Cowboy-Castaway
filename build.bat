@@ -1,4 +1,4 @@
-REM @echo off
+@echo off
 rem ============================================================
 rem  build.bat - Cowboy op het eiland: compileren en starten
 rem  Zet dit bestand in dezelfde map als main.c

@@ -2020,6 +2020,135 @@ static const anim_step binoculars_steps[] = {
  * je kunt zo een nieuwe animatie op een eigen toets zetten. Geen toets
  * nodig? Vul dan KEY_GEEN, KEY_GEEN in.
  */
+/* =====================================================================
+ * ON-DEMAND EFFECT-PLAATJES  (delen blok 111, zie FX_SCRATCH in anims.h)
+ * =====================================================================
+ * Deze twee horen NIET in fx_frames[]. main.c kopieert het juiste plaatje
+ * bij de start van de animatie in het gedeelde scratch-blok. */
+
+/* Kokosnoot: klein rond bruin balletje (hi-res).
+ *   ......####..............
+ *   .....######.............
+ *   ....########............
+ *   ....########............
+ *   ....########............
+ *   .....######.............
+ *   ......####..............
+ */
+const unsigned char fx_coconut[64] = {
+    0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00,
+    0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00,
+    0x03,0xC0,0x00,   /* r8  */
+    0x07,0xE0,0x00,   /* r9  */
+    0x0F,0xF0,0x00,   /* r10 */
+    0x0F,0xF0,0x00,   /* r11 */
+    0x0F,0xF0,0x00,   /* r12 */
+    0x07,0xE0,0x00,   /* r13 */
+    0x03,0xC0,0x00,   /* r14 */
+    0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00,
+    0x00,0x00,0x00, 0x00,0x00,0x00,
+    0x00
+};
+
+/* Fles met boodschap (hi-res, groen glas), liggend, kurk naar rechts.
+ *   ....#######.............
+ *   ...###########..........
+ *   ...############.........
+ *   ...###########..........
+ *   ....#######.............
+ */
+const unsigned char fx_bottle[64] = {
+    0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00,
+    0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00,
+    0x00,0x00,0x00,
+    0x0F,0xE0,0x00,   /* r9  */
+    0x1F,0xFC,0x00,   /* r10 */
+    0x1F,0xFE,0x00,   /* r11 */
+    0x1F,0xFC,0x00,   /* r12 */
+    0x0F,0xE0,0x00,   /* r13 */
+    0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00,
+    0x00,0x00,0x00, 0x00,0x00,0x00, 0x00,0x00,0x00,
+    0x00
+};
+
+
+/* =====================================================================
+ * DRAAIBOEK: PIROUETTE  (geen nieuwe plaatjes -- hergebruikt de 4 standen)
+ * =====================================================================
+ * De cowboy draait twee keer soepel om zijn as. Volgorde naar-voren ->
+ * rechts -> rug -> links -> naar-voren is een nette rechtsom-draai. Geen
+ * effect-sprites, dus alles FX_NONE; het draaien zit volledig in het
+ * cow-veld. Laat ticks van 9 naar 4 aflopen als je hem wilt laten
+ * versnellen. */
+static const anim_step pirouette_steps[] = {
+/*    effect A (ongebruikt)     effect B (ongebruikt)      duur  houding */
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,   8, COW_DOWN  },
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,   7, COW_RIGHT },
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,   7, COW_UP    },
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,   7, COW_LEFT  },
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,   6, COW_DOWN  },
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,   6, COW_RIGHT },
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,   6, COW_UP    },
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,   6, COW_LEFT  },
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,  12, COW_DOWN  },
+    { FX_NONE,0,0,0,  FX_NONE,0,0,0,  15, COW_IDLE  },
+};
+
+
+/* =====================================================================
+ * DRAAIBOEK: KOKOSNOOT  (valt echt uit de palm)
+ * =====================================================================
+ * WORLD-animatie met een VAST ankerpunt (start_x, start_y in de entry).
+ * vx = vy = 0, dus het basispunt blijft staan; de val zit volledig in de
+ * dy van elke stap. dy = 0 is "op het zand aan de voet", negatieve dy tilt
+ * 'm omhoog de kroon in. dx = 0 laat 'm recht vallen; bij het stuiteren op
+ * de grond loopt dx op. De cowboy doet standaard niet mee -> COW_KEEP.
+ *
+ * Met ANIM_BONK erbij (zie de entry) checkt main.c of de cowboy toevallig
+ * onder de vallende noot loopt. Zo ja, dan wankelt hij duizelig na EN kaatst
+ * de noot zichtbaar van zijn hoed weg; deze grond-stuiter hieronder wordt
+ * dan afgebroken en vervangen door de terugkaats-boog in main.c. */
+static const anim_step coconut_steps[] = {
+/*    effect A (kokosnoot=scratch)        effect B (ongebruikt)     duur houding */
+    { FX_SCRATCH, COLOR_BROWN,  0, -44,  FX_NONE,0,0,0,  10, COW_KEEP },  /* hangt in de kroon */
+    { FX_SCRATCH, COLOR_BROWN,  0, -43,  FX_NONE,0,0,0,   6, COW_KEEP },  /* wiebelt... los! */
+    { FX_SCRATCH, COLOR_BROWN,  0, -40,  FX_NONE,0,0,0,   4, COW_KEEP },
+    { FX_SCRATCH, COLOR_BROWN,  0, -34,  FX_NONE,0,0,0,   3, COW_KEEP },
+    { FX_SCRATCH, COLOR_BROWN,  0, -26,  FX_NONE,0,0,0,   3, COW_KEEP },
+    { FX_SCRATCH, COLOR_BROWN,  0, -16,  FX_NONE,0,0,0,   2, COW_KEEP },
+    { FX_SCRATCH, COLOR_BROWN,  0,  -6,  FX_NONE,0,0,0,   2, COW_KEEP },
+    { FX_SCRATCH, COLOR_BROWN,  0,   0,  FX_NONE,0,0,0,   2, COW_KEEP },  /* klap op het zand */
+    { FX_SCRATCH, COLOR_BROWN,  0,  -9,  FX_NONE,0,0,0,   3, COW_KEEP },  /* stuitert */
+    { FX_SCRATCH, COLOR_BROWN,  1, -11,  FX_NONE,0,0,0,   3, COW_KEEP },
+    { FX_SCRATCH, COLOR_BROWN,  2,  -5,  FX_NONE,0,0,0,   3, COW_KEEP },
+    { FX_SCRATCH, COLOR_BROWN,  3,   0,  FX_NONE,0,0,0,   4, COW_KEEP },  /* ligt stil */
+    { FX_SCRATCH, COLOR_BROWN,  7,   0,  FX_NONE,0,0,0,   5, COW_KEEP },  /* rolt weg */
+    { FX_SCRATCH, COLOR_BROWN, 13,   0,  FX_NONE,0,0,0,   5, COW_KEEP },
+    { FX_NONE,0,0,0,            FX_NONE,0,0,0,   6, COW_KEEP },
+};
+
+
+/* =====================================================================
+ * DRAAIBOEK: FLES MET BOODSCHAP  (dobbert de branding in)
+ * =====================================================================
+ * Een WORLD-animatie zoals de haai: hij begint rechts in de voorste zee en
+ * drijft langzaam naar links, dobberend (bob via dy), tot hij bij de
+ * vloedlijn tot rust komt. De cowboy trekt zich er niets van aan en loopt
+ * gewoon door -- dus overal COW_KEEP. */
+static const anim_step bottle_steps[] = {
+/*    effect A (fles=scratch)             effect B (ongebruikt)     duur houding */
+    { FX_SCRATCH, COLOR_GREEN, 0, 0,  FX_NONE,0,0,0,  26, COW_KEEP },
+    { FX_SCRATCH, COLOR_GREEN, 0, 1,  FX_NONE,0,0,0,  26, COW_KEEP },
+    { FX_SCRATCH, COLOR_GREEN, 0, 2,  FX_NONE,0,0,0,  26, COW_KEEP },
+    { FX_SCRATCH, COLOR_GREEN, 0, 1,  FX_NONE,0,0,0,  26, COW_KEEP },
+    { FX_SCRATCH, COLOR_GREEN, 0, 0,  FX_NONE,0,0,0,  26, COW_KEEP },
+    { FX_SCRATCH, COLOR_GREEN, 0, 1,  FX_NONE,0,0,0,  26, COW_KEEP },
+    { FX_SCRATCH, COLOR_GREEN, 0, 2,  FX_NONE,0,0,0,  26, COW_KEEP },
+    { FX_SCRATCH, COLOR_GREEN, 0, 1,  FX_NONE,0,0,0,  26, COW_KEEP },
+    { FX_SCRATCH, COLOR_GREEN, 0, 0,  FX_NONE,0,0,0,  30, COW_KEEP },  /* ligt stil aan de vloedlijn */
+};
+
+
 const animation animations[] = {
     /* --- kampvuur naar rechts: speelt zich naast de cowboy af ------------ */
     { campfire_steps, sizeof(campfire_steps) / sizeof(anim_step),
@@ -2032,7 +2161,7 @@ const animation animations[] = {
     /* --- kampvuur naar links: speelt zich naast de cowboy af ------------- */
     { campfire_left_steps, sizeof(campfire_left_steps) / sizeof(anim_step),
       0x01,                     /* A (vuur) is multicolor, B (rook) hi-res  */
-      KEY_GEEN, KEY_GEEN,       /* geen eigen toets; hoort bij nummer 0     */
+      KEY_GEEN, KEYBIT_GEEN,       /* geen eigen toets; hoort bij nummer 0     */
       ANIM_FOLLOW | ANIM_TO_LEFT, /* naast de cowboy; hij kijkt naar links  */
       0, 0, 0, 0,               /* startpunt/snelheid: niet van toepassing  */
       0 },                      /* gespiegelde tegenhanger = nummer 0       */
@@ -2052,15 +2181,15 @@ const animation animations[] = {
       KEYROW_C, KEYBIT_C,       /* sneltoets C van Catch                    */
       ANIM_FOLLOW | ANIM_AT_SHORE,   /* hij loopt eerst naar het water      */
       0, 0, 0, 0,
-      3 },                      /* gespiegelde tegenhanger = nummer 3       */
+      4 },                      /* gespiegelde tegenhanger = nummer 4       */
 
     /* --- vissen naar links: alleen aan de linkeroever --------------------- */
     { fishing_left_steps, sizeof(fishing_left_steps) / sizeof(anim_step),
       0x02,
-      KEY_GEEN, KEY_GEEN,       /* geen eigen toets; hoort bij nummer 2     */
+      KEY_GEEN, KEY_GEEN,       /* geen eigen toets; hoort bij nummer 3     */
       ANIM_FOLLOW | ANIM_AT_SHORE | ANIM_TO_LEFT,
       0, 0, 0, 0,
-      2 },                      /* gespiegelde tegenhanger = nummer 2       */
+      3 },                      /* gespiegelde tegenhanger = nummer 3       */
 
     /* --- rondkijken met de verrekijker: kan overal ----------------------- */
     { binoculars_steps, sizeof(binoculars_steps) / sizeof(anim_step),
@@ -2068,7 +2197,33 @@ const animation animations[] = {
       KEYROW_B, KEYBIT_B,       /* sneltoets B van Binoculars               */
       ANIM_FOLLOW,              /* naast de cowboy; hij blijft staan        */
       0, 0, 0, 0,
-      ANIM_NO_MIRROR }
+      ANIM_NO_MIRROR },
+
+    /* --- pirouette: draait om zijn as, kan overal ----------------------- */
+    { pirouette_steps, sizeof(pirouette_steps) / sizeof(anim_step),
+      0x00,                     /* geen effect-sprites                      */
+      KEYROW_P, KEYBIT_P,       /* sneltoets P van Pirouette                */
+      ANIM_FOLLOW,              /* op zijn plek; hij blijft staan draaien   */
+      0, 0, 0, 0,
+      ANIM_NO_MIRROR },
+
+    /* --- kokosnoot: valt uit de palm, bonkt 'm als hij eronder loopt ----- */
+    { coconut_steps, sizeof(coconut_steps) / sizeof(anim_step),
+      0x00,                     /* hi-res bruin, geen multicolor            */
+      KEYROW_K, KEYBIT_K,       /* sneltoets K van Kokosnoot                */
+      ANIM_WORLD | ANIM_BONK,   /* vast punt bij de palm; kan hem raken     */
+      185, 176,                 /* startpunt: horizontaal bij de palmstam   */
+      0, 0,                     /* blijft staan; de val zit in de dy's      */
+      ANIM_NO_MIRROR, fx_coconut },
+
+    /* --- fles met boodschap: spoelt dobberend aan land ------------------ */
+    { bottle_steps, sizeof(bottle_steps) / sizeof(anim_step),
+      0x00,                     /* hi-res groen glas                        */
+      KEYROW_M, KEYBIT_M,       /* sneltoets M van Message                  */
+      ANIM_WORLD,               /* eigen plek in de zee; cowboy loopt door  */
+      300, 226,                 /* startpunt: rechts in de voorste zee      */
+      -1, 0,                    /* 1 pixel per beeld naar links (aanspoelen)*/
+      ANIM_NO_MIRROR, fx_bottle }
 };
 
 const unsigned char animation_count = sizeof(animations) / sizeof(animation);
