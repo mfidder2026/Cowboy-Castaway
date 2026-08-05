@@ -2,7 +2,7 @@
 
 A "Cowboy on a Desert Island" demo/game for the **Commodore 64**, written in C using the [`cc65`](https://cc65.github.io/) compiler. Explore the island, trigger animations, and enjoy the retro C64 graphics and sound!
 
-![Cowboy Castaway](https://raw.githubusercontent.com/your-repo/cowboy-castaway/main/screenshot.png) *(Replace with an actual screenshot if available)*
+![Cowboy Castaway]https://github.com/mfidder2026/Cowboy-Castaway/blob/main/sprites/intro1_processed.png)
 
 ---
 
